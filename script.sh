@@ -10,17 +10,24 @@ is_dead_container_detected=0
 while read -r id name; do
 
     container_created_date=$(docker inspect "$id" -f "{{.Created}}")
-
     # container_created_date in sec
-    trimmed_date=$(date -j -f '%Y-%m-%dT%H:%M:%S' "$container_created_date%%.*" +%s)
+    trimmed_date=${container_created_date%%.*}
+    trimmed_date=${trimmed_date%Z}
+
+    if date -d "$trimmed_date" +%s > /dev/null 2>&1; then
+        estimated_date=$(date -d "$trimmed_date" +%s)
+    else 
+        estimated_date=$(date -j -f '%Y-%M-%dT%H:%M:%S' "$trimmed_date" +%s)
+    fi
 
     # estimate days
-    date_in_days=$(( (current_date - trimmed_date) / 86400 ))
+    date_in_days=$(( (current_date - estimated_date) / 86400 ))
 
     if [ "$date_in_days" -gt "$WINDOW_DAYS" ]; then
         is_dead_container_detected=1
-        echo "Removing container $id ($name) with volumes"
-        # docker rm -v "$id"
+        echo "Removing container $id ($name)"
+        docker rm -v "$id"
+        echo "Removed..."
     fi
 done < <(docker ps -a -f status=exited -f status=dead --format "{{.ID}} {{.Names}}")
 
